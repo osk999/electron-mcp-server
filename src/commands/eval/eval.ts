@@ -87,7 +87,6 @@ export const evalCommand = defineCommand({
           return {
             success: false,
             error: 'JavaScript error: ' + error.message,
-            stack: error.stack,
             result: null
           };
         }
@@ -116,9 +115,7 @@ export const evalCommand = defineCommand({
       const parsed = JSON.parse(jsonPayload) as StructuredEvalResult;
       if (parsed && typeof parsed === 'object' && 'success' in parsed) {
         if (!parsed.success) {
-          return `❌ Command failed: ${parsed.error}${
-            parsed.stack ? '\nStack: ' + parsed.stack : ''
-          }`;
+          return `❌ Command failed: ${parsed.error}`;
         }
         // parsed.result is now always present (null when underlying value was
         // undefined, see IIFE comment). Emit `result: null` explicitly so the

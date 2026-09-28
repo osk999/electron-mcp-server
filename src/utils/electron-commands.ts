@@ -368,7 +368,7 @@ export function generateClickByTextCommand(text: string): string {
 
         return {
           element: el,
-          text: (el.textContent || '').trim(),
+          text: ownVisibleText(el),
           ariaLabel: el.getAttribute('aria-label') || '',
           title: el.title || '',
           role: el.getAttribute('role') || el.tagName.toLowerCase(),
@@ -380,28 +380,8 @@ export function generateClickByTextCommand(text: string): string {
         };
       }
 
-      // Score element relevance.
-      // textScore (0..100) is the gate — bonuses are tie-breakers on top.
-      // Pre-fix this function gave bonus-only scores to text-unrelated elements
-      // (e.g. "Heavy Math" matched "Fetch Data" via positional char similarity → #3).
-      function scoreElement(analysis, target) {
-        const textScore = scoreTextMatch(
-          analysis.text,
-          analysis.ariaLabel,
-          analysis.title,
-          target
-        );
-        if (textScore === 0) return { score: 0, textScore: 0 };
-
-        let score = textScore;
-        if (analysis.isInteractive) score += 10;
-        if (analysis.isVisible) score += 15;
-        if (analysis.rect.width > 100 && analysis.rect.height > 30) score += 5;
-        score += Math.min(analysis.zIndex, 5);
-        return { score: score, textScore: textScore };
-      }
-
-      // Find all potentially clickable elements
+      // Find all potentially clickable elements. Text used for scoring is the
+      // element's own visible text, not the concatenated text of descendants.
       const allElements = document.querySelectorAll('*');
       const candidates = [];
 
@@ -409,29 +389,37 @@ export function generateClickByTextCommand(text: string): string {
         const analysis = analyzeElement(el);
 
         if (analysis.isVisible && (analysis.isInteractive || analysis.text || analysis.ariaLabel)) {
-          const scored = scoreElement(analysis, targetText);
-          // textScore === 0 means no textual relation — drop it so bonuses
-          // alone (visibility/interactivity) cannot promote noise.
-          if (scored.textScore > 0) {
-            candidates.push({ ...analysis, score: scored.score, textScore: scored.textScore });
-          }
+          let bonus = 0;
+          if (analysis.isInteractive) bonus += 10;
+          if (analysis.isVisible) bonus += 15;
+          if (analysis.rect.width > 100 && analysis.rect.height > 30) bonus += 5;
+          bonus += Math.min(analysis.zIndex, 5);
+          candidates.push({
+            element: el,
+            text: analysis.text,
+            ariaLabel: analysis.ariaLabel,
+            title: analysis.title,
+            bonus: bonus
+          });
         }
       }
 
-      if (candidates.length === 0) {
+      // Exact own-label (textScore 100) beats a longer control that only
+      // contains the words, even when that longer control has a larger bonus.
+      // pickClickCandidate is defined in src/utils/text-matching.ts.
+      const picked = pickClickCandidate(candidates, targetText, ${CLICK_BY_TEXT_MIN_TEXT_SCORE});
+
+      if (!picked) {
         return \`No clickable elements found containing text: "\${targetText}"\`;
       }
 
-      // Sort by score and get the best match
-      candidates.sort((a, b) => b.score - a.score);
-      const best = candidates[0];
-
-      // Require strong textual evidence before clicking. CLICK_BY_TEXT_MIN_TEXT_SCORE
-      // is interpolated from src/utils/text-matching.ts and tracks the same
-      // calibration the unit tests assert (50 = "all target words at word boundaries").
-      if (best.textScore < ${CLICK_BY_TEXT_MIN_TEXT_SCORE}) {
-        return \`Found potential matches but confidence too low (textScore: \${best.textScore}, total: \${best.score}). Best match was: "\${best.text || best.ariaLabel}" - try being more specific.\`;
+      if (!picked.accepted) {
+        const rejected = picked.candidate;
+        return \`Found potential matches but confidence too low (textScore: \${picked.textScore}, total: \${picked.total}). Best match was: "\${rejected.text || rejected.ariaLabel}" - try being more specific.\`;
       }
+
+      const best = picked.candidate;
+      best.score = picked.total;
       
       // Enhanced clicking for React components with duplicate prevention
       function clickElement(element) {

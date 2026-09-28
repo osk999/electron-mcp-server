@@ -32,10 +32,13 @@ export const navigateToHash = defineCommand({
   schema,
   operationType: 'command',
   async execute(args, target) {
+    const lowered = args.hash.toLowerCase();
     if (
-      args.hash.includes('javascript:') ||
-      args.hash.includes('<script') ||
-      args.hash.includes('://')
+      lowered.includes('javascript:') ||
+      lowered.includes('vbscript:') ||
+      lowered.includes('data:text/html') ||
+      lowered.includes('<script') ||
+      lowered.includes('://')
     ) {
       return 'Invalid hash: contains dangerous content';
     }

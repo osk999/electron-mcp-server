@@ -28,5 +28,16 @@ export function escapeJsString(input: string): string {
  */
 export function containsDangerousContent(input: string): boolean {
   const lowered = input.toLowerCase();
-  return lowered.includes('javascript:') || lowered.includes('<script');
+  return (
+    lowered.includes('javascript:') ||
+    lowered.includes('vbscript:') ||
+    lowered.includes('data:text/html') ||
+    lowered.includes('<script') ||
+    lowered.includes('<iframe') ||
+    lowered.includes('<object') ||
+    lowered.includes('<embed') ||
+    lowered.includes('onerror=') ||
+    lowered.includes('onload=') ||
+    lowered.includes('onclick=')
+  );
 }

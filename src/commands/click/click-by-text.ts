@@ -10,7 +10,7 @@ const schema = z.object({
     .string()
     .min(1)
     .describe(
-      'Visible text, aria-label, or title to match. Best-effort scoring; pass a longer/more unique substring when matches are ambiguous.',
+      'Visible text, aria-label, or title to match. An exact own-label match wins over a longer control that only contains those words. A weak substring match is not clicked.',
     ),
 });
 

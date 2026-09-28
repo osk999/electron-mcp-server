@@ -124,6 +124,24 @@ export function getDefaultSecurityLevel(): SecurityLevel {
   if (envSecurityLevel) {
     const normalizedLevel = envSecurityLevel.toLowerCase();
 
+    // Block 'development' level — it disables all security controls.
+    // If someone explicitly needs it they can set MCP_DEV_MODE=1 AND
+    // SECURITY_LEVEL=development, but a lone env var must not weaken security.
+    // Note: we use bracket notation for process.env access so webpack's
+    // DefinePlugin (which replaces process.env.NODE_ENV at compile time in
+    // production mode) cannot inline the value.
+    if (normalizedLevel === SecurityLevel.DEVELOPMENT) {
+      const nodeEnv = process.env['NODE_ENV'];
+      const devModeFlag = process.env['MCP_DEV_MODE'];
+      if (nodeEnv !== 'development' && devModeFlag !== '1') {
+        logger.warn(
+          `SECURITY_LEVEL=development rejected: set MCP_DEV_MODE=1 or NODE_ENV=development to enable. Falling back to BALANCED.`,
+        );
+        return SecurityLevel.BALANCED;
+      }
+      logger.warn('SECURITY_LEVEL=development accepted — all security controls DISABLED');
+    }
+
     // Check if the provided value is a valid SecurityLevel
     if (Object.values(SecurityLevel).includes(normalizedLevel as SecurityLevel)) {
       logger.info(`Using security level from environment: ${normalizedLevel}`);

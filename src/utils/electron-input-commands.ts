@@ -2,6 +2,7 @@
  * Enhanced input interaction commands for React-based Electron applications
  * Focuses on proper event handling and React state management
  */
+import { PAGE_OVERVIEW_HELPERS_JS } from './page-overview';
 
 /**
  * Securely escape text input for JavaScript code generation
@@ -231,89 +232,38 @@ export function generateFillInputCommand(
         return matches / maxLen;
       }
       
-      // Enhanced input filling for React components
+      // Set a React-controlled input synchronously. The native value setter
+      // updates the DOM property that a later .value read observes, and the
+      // input event is what React's onChange listens for. Delaying either
+      // step leaves the field empty for the next tool call.
       function fillInputValue(element, newValue) {
         try {
-          // Store original value for comparison
-          const originalValue = element.value;
-          
-          // Scroll into view
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          
-          // Focus the element first
           element.focus();
-          
-          // Wait a moment for focus
-          setTimeout(() => {
-            // For React components, we need to trigger the right events
-            
-            // Method 1: Direct value assignment with React events
-            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-            const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
-            
-            // Clear existing content first
-            element.select();
-            
-            if (element.tagName === 'INPUT' && nativeInputValueSetter) {
-              nativeInputValueSetter.call(element, newValue);
-            } else if (element.tagName === 'TEXTAREA' && nativeTextAreaValueSetter) {
-              nativeTextAreaValueSetter.call(element, newValue);
-            } else {
-              element.value = newValue;
-            }
-            
-            // Create and dispatch React-compatible events in proper order
-            const events = [
-              new Event('focus', { bubbles: true, cancelable: true }),
-              new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'a', ctrlKey: true }), // Ctrl+A
-              new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'a', ctrlKey: true }),
-              new Event('input', { bubbles: true, cancelable: true }),
-              new Event('change', { bubbles: true, cancelable: true }),
-              new Event('blur', { bubbles: true, cancelable: true })
-            ];
-            
-            events.forEach((event, index) => {
-              setTimeout(() => {
-                element.dispatchEvent(event);
-              }, index * 50);
-            });
-            
-            // Method 2: Additional React trigger for controlled components
-            if (window.React || window._reactInternalInstance || element._reactInternalFiber) {
-              setTimeout(() => {
-                // Trigger React's internal onChange
-                const reactEvent = new Event('input', { bubbles: true });
-                Object.defineProperty(reactEvent, 'target', { value: element, writable: false });
-                Object.defineProperty(reactEvent, 'currentTarget', { value: element, writable: false });
-                element.dispatchEvent(reactEvent);
-              }, 300);
-            }
-            
-            // Method 3: Fallback for contenteditable elements
-            if (element.contentEditable === 'true') {
-              element.textContent = newValue;
-              element.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-            
-            // Trigger form validation if present
-            if (element.form && element.form.checkValidity) {
-              setTimeout(() => {
-                element.form.checkValidity();
-              }, 500);
-            }
-            
-            // Verify the value was set correctly
-            setTimeout(() => {
-              if (element.value === newValue) {
-                console.log('Input value successfully set and verified');
-              } else {
-                console.warn('Input value verification failed:', element.value, 'vs', newValue);
-              }
-            }, 600);
-            
-          }, 100);
-          
-          return true;
+
+          if (element.isContentEditable || element.contentEditable === 'true') {
+            element.textContent = newValue;
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            return element.textContent === newValue;
+          }
+
+          var proto = element.tagName === 'TEXTAREA'
+            ? window.HTMLTextAreaElement.prototype
+            : window.HTMLInputElement.prototype;
+          var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+          var setter = descriptor && descriptor.set;
+          var previous = element.value;
+          if (setter) {
+            setter.call(element, newValue);
+          } else {
+            element.value = newValue;
+          }
+          var tracker = element._valueTracker;
+          if (tracker && typeof tracker.setValue === 'function') {
+            tracker.setValue(previous);
+          }
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+          element.dispatchEvent(new Event('change', { bubbles: true }));
+          return element.value === newValue;
         } catch (error) {
           console.error('Error in fillInputValue:', error);
           return false;
@@ -463,6 +413,7 @@ export function generateSelectOptionCommand(selector: string, value: string, tex
 export function generatePageStructureCommand(): string {
   return `
     (function() {
+      ${PAGE_OVERVIEW_HELPERS_JS}
       const structure = {
         title: document.title,
         url: window.location.href,
@@ -512,15 +463,15 @@ export function generatePageStructureCommand(): string {
       document.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"]').forEach(el => {
         const rect = el.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
-          structure.buttons.push({
-            text: el.textContent?.trim() || el.value || '',
+          const named = controlName(el);
+          structure.buttons.push(shapeOverviewControl({
+            text: named.text,
             id: el.id || '',
-            ariaLabel: el.getAttribute('aria-label') || '',
-            className: el.className || '',
+            ariaLabel: named.ariaLabel,
             type: el.type || 'button',
             disabled: el.disabled,
             visible: !el.hidden && getComputedStyle(el).display !== 'none'
-          });
+          }));
         }
       });
       

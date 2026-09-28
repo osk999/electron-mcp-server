@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import { findElectronTarget, connectForLogs } from './electron-connection';
 import { logger } from './logger';
@@ -123,13 +123,22 @@ async function getSystemElectronLogs(lines: number = 100): Promise<string> {
     });
 
     try {
-      const { stdout: logContent } = await execAsync(
-        `log show --last 1h --predicate 'process == "Electron"' --style compact | tail -${lines}`,
-      );
-      if (logContent.trim()) {
+      const execFileAsync = promisify(execFile);
+      const { stdout: logContent } = await execFileAsync('log', [
+        'show',
+        '--last',
+        '1h',
+        '--predicate',
+        'process == "Electron"',
+        '--style',
+        'compact',
+      ]);
+      // Trim to requested line count
+      const trimmedLog = logContent.split('\n').slice(-lines).join('\n');
+      if (trimmedLog.trim()) {
         logOutput += 'Recent Electron logs from system:\n';
         logOutput += '==========================================\n';
-        logOutput += logContent;
+        logOutput += trimmedLog;
       } else {
         logOutput +=
           'No recent Electron logs found in system logs. Try enabling remote debugging with --remote-debugging-port=9222 for better log access.';

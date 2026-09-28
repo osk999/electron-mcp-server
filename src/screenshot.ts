@@ -135,14 +135,10 @@ function encryptScreenshotData(buffer: Buffer): EncryptedScreenshot {
       timestamp: new Date().toISOString(),
     };
   } catch (error) {
-    logger.warn('Failed to encrypt screenshot data:', error);
-    // Fallback to base64 encoding if encryption fails
-    return {
-      encryptedData: buffer.toString('base64'),
-      iv: '',
-      salt: '', // Empty salt for fallback
-      timestamp: new Date().toISOString(),
-    };
+    // Encryption failure is a hard error — never silently store plaintext
+    throw new Error(
+      `Screenshot encryption failed: ${error instanceof Error ? error.message : String(error)}. Set SCREENSHOT_ENCRYPTION_KEY env var (openssl rand -hex 32).`,
+    );
   }
 }
 
@@ -292,12 +288,10 @@ export async function takeScreenshot(options: {
     // If outputPath is provided, save encrypted data to file
     if (outputPath) {
       await fs.writeFile(outputPath + '.encrypted', JSON.stringify(encryptedScreenshot));
-      // Also save unencrypted for compatibility (in production, consider removing this)
-      await fs.writeFile(outputPath, screenshotBuffer);
       return {
         filePath: outputPath,
         base64: base64Data,
-        data: `Screenshot saved to: ${outputPath} (encrypted backup: ${outputPath}.encrypted) and returned as base64 data`,
+        data: `Screenshot saved (encrypted): ${outputPath}.encrypted and returned as base64 data`,
       };
     } else {
       return {

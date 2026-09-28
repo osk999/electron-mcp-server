@@ -104,4 +104,43 @@ function scoreTextMatch(text, label, title, target) {
   }
   return best;
 }
+
+function ownVisibleText(el) {
+  if (!el || !el.childNodes) return '';
+  var parts = [];
+  for (var i = 0; i < el.childNodes.length; i++) {
+    var node = el.childNodes[i];
+    if (node && node.nodeType === 3 && node.nodeValue) parts.push(node.nodeValue);
+  }
+  return parts.join('').replace(/\\s+/g, ' ').trim();
+}
+
+/**
+ * Choose a click target from candidates that already carry their OWN visible
+ * text (not descendant textContent), aria-label, title, and a bonus.
+ *
+ * Exact own-label equality (textScore 100) beats a longer control that only
+ * contains the words (textScore 70 or below), even when that longer control
+ * has a larger bonus. A match below minScore is returned with accepted=false
+ * so the caller can refuse the click. Returns null when nothing is related.
+ */
+function pickClickCandidate(candidates, target, minScore) {
+  var best = null;
+  for (var i = 0; i < candidates.length; i++) {
+    var candidate = candidates[i];
+    var textScore = scoreTextMatch(candidate.text, candidate.ariaLabel, candidate.title, target);
+    if (textScore === 0) continue;
+    var total = textScore + (candidate.bonus || 0);
+    if (
+      !best ||
+      textScore > best.textScore ||
+      (textScore === best.textScore && total > best.total)
+    ) {
+      best = { candidate: candidate, textScore: textScore, total: total };
+    }
+  }
+  if (!best) return null;
+  best.accepted = best.textScore >= minScore;
+  return best;
+}
 `;

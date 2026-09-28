@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CLICK_BY_TEXT_MIN_TEXT_SCORE } from '../../src/constants';
+import { generateClickByTextCommand } from '../../src/utils/electron-commands';
 import { TEXT_MATCH_HELPERS_JS } from '../../src/utils/text-matching';
 
 /**
@@ -8,9 +9,29 @@ import { TEXT_MATCH_HELPERS_JS } from '../../src/utils/text-matching';
  * renderer over CDP. Avoids drift between the tested algorithm and the one
  * that runs in production.
  */
+type ClickCandidate = {
+  text: string;
+  ariaLabel: string;
+  title: string;
+  bonus: number;
+};
+
+type PickedClick = {
+  candidate: ClickCandidate;
+  textScore: number;
+  total: number;
+  accepted: boolean;
+} | null;
+
 type Helpers = {
   scoreTextMatch: (text: string, label: string, title: string, target: string) => number;
   containsAsWord: (haystack: string, needle: string) => boolean;
+  ownVisibleText: (el: { childNodes?: Array<{ nodeType: number; nodeValue?: string }> }) => string;
+  pickClickCandidate: (
+    candidates: ClickCandidate[],
+    target: string,
+    minScore: number,
+  ) => PickedClick;
 };
 
 function loadHelpers(): Helpers {
@@ -21,12 +42,14 @@ function loadHelpers(): Helpers {
     'exports',
     `${TEXT_MATCH_HELPERS_JS}
     exports.scoreTextMatch = scoreTextMatch;
-    exports.containsAsWord = containsAsWord;`,
+    exports.containsAsWord = containsAsWord;
+    exports.ownVisibleText = ownVisibleText;
+    exports.pickClickCandidate = pickClickCandidate;`,
   )(exports);
   return exports as unknown as Helpers;
 }
 
-const { scoreTextMatch, containsAsWord } = loadHelpers();
+const { scoreTextMatch, containsAsWord, ownVisibleText, pickClickCandidate } = loadHelpers();
 
 describe('containsAsWord', () => {
   it('matches whole word at start', () => {
@@ -143,5 +166,80 @@ describe('scoreTextMatch — field selection', () => {
 
   it('handles empty fields safely', () => {
     expect(scoreTextMatch('', '', '', 'Submit')).toBe(0);
+  });
+});
+
+describe('pickClickCandidate — exact own label beats a longer container', () => {
+  it('reads only direct text nodes, not descendant text', () => {
+    const parent = {
+      childNodes: [
+        { nodeType: 1, nodeValue: 'ignored' },
+        { nodeType: 3, nodeValue: '  ' },
+      ],
+    };
+    const exact = { childNodes: [{ nodeType: 3, nodeValue: ' New chat ' }] };
+    expect(ownVisibleText(parent)).toBe('');
+    expect(ownVisibleText(exact)).toBe('New chat');
+  });
+
+  it('selects the exact label even when a longer control contains those words and has a larger bonus', () => {
+    const longer = {
+      text: 'Open the New chat settings panel',
+      ariaLabel: '',
+      title: '',
+      bonus: 80,
+    };
+    const exact = { text: 'New chat', ariaLabel: '', title: '', bonus: 0 };
+    const picked = pickClickCandidate([longer, exact], 'New chat', CLICK_BY_TEXT_MIN_TEXT_SCORE);
+    expect(picked).not.toBeNull();
+    expect(picked!.accepted).toBe(true);
+    expect(picked!.textScore).toBe(100);
+    expect(picked!.candidate).toBe(exact);
+    // The old total-score sort would have clicked the longer control:
+    // 70 + 80 > 100 + 0.
+    expect(70 + longer.bonus).toBeGreaterThan(100 + exact.bonus);
+  });
+
+  it('selects an exact aria-label when the longer control only contains the words', () => {
+    const longer = {
+      text: 'Create new Bot from this template list',
+      ariaLabel: '',
+      title: '',
+      bonus: 40,
+    };
+    const exact = { text: '', ariaLabel: 'Create new Bot', title: '', bonus: 5 };
+    const picked = pickClickCandidate([longer, exact], 'Create new Bot', CLICK_BY_TEXT_MIN_TEXT_SCORE);
+    expect(picked!.candidate).toBe(exact);
+    expect(picked!.textScore).toBe(100);
+  });
+
+  it('does not accept a low-confidence substring match', () => {
+    const weak = {
+      text: 'Math Solver',
+      ariaLabel: '',
+      title: '',
+      bonus: 40,
+    };
+    const picked = pickClickCandidate([weak], 'Heavy Math', CLICK_BY_TEXT_MIN_TEXT_SCORE);
+    expect(picked).not.toBeNull();
+    expect(picked!.textScore).toBeLessThan(CLICK_BY_TEXT_MIN_TEXT_SCORE);
+    expect(picked!.accepted).toBe(false);
+  });
+
+  it('returns null when nothing is textually related', () => {
+    expect(
+      pickClickCandidate(
+        [{ text: 'Fetch Data', ariaLabel: '', title: '', bonus: 40 }],
+        'Heavy Math',
+        CLICK_BY_TEXT_MIN_TEXT_SCORE,
+      ),
+    ).toBeNull();
+  });
+
+  it('ships the exact-label picker in the click command', () => {
+    const source = generateClickByTextCommand('New chat');
+    expect(source).toContain('ownVisibleText(el)');
+    expect(source).toContain('pickClickCandidate(');
+    expect(source).not.toContain('(el.textContent || \'\').trim()');
   });
 });

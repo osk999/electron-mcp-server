@@ -9,7 +9,12 @@ The server automatically uses the BALANCED security level, which:
 - Allows safe UI interactions and DOM queries
 - Blocks dangerous operations like eval and assignments
 - Provides good balance between security and functionality
-- Cannot be overridden by environment variables for security consistency
+
+### Environment Variable Override
+
+The `SECURITY_LEVEL` environment variable can be set to `strict`, `balanced`, `permissive`, or `development`.
+
+**Important:** The `development` level is gated by `MCP_DEV_MODE=1` (or `NODE_ENV=development`). Without one of these set, `SECURITY_LEVEL=development` is rejected and the server falls back to `balanced`. This prevents accidental security downgrades in production deployments.
 
 ## Security Features
 
@@ -70,7 +75,7 @@ new KeyboardEvent('keydown', { key: 'n', metaKey: true });
 
 ## Configuration in Code
 
-The security level is automatically set to BALANCED and cannot be changed:
+The security level is automatically set to BALANCED:
 
 ```typescript
 import { SecurityManager } from './security/manager';
@@ -78,6 +83,8 @@ import { SecurityManager } from './security/manager';
 // SecurityManager automatically uses BALANCED security level
 const securityManager = new SecurityManager();
 
-// Security level is fixed and cannot be changed at runtime
-// This ensures consistent security across all deployments
+// Security level can be changed via environment variable SECURITY_LEVEL
+// (development level requires MCP_DEV_MODE=1 or NODE_ENV=development)
+// It can also be changed at runtime via setSecurityLevel(), but this
+// should only be done in controlled testing scenarios.
 ```

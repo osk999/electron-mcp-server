@@ -1,5 +1,4 @@
-import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types';
-import { z } from 'zod';
+import { CallToolRequest } from '@modelcontextprotocol/sdk/types';
 import { ToolName } from './tools';
 import {
   TakeScreenshotSchema,
@@ -26,7 +25,7 @@ import { securityManager } from './security/manager';
  *   `commandsByName` registry. This replaces the v1 `send_command_to_electron`
  *   switch/case dispatch and removes the `command/args` indirection.
  */
-export async function handleToolCall(request: z.infer<typeof CallToolRequestSchema>) {
+export async function handleToolCall(request: CallToolRequest) {
   const { name, arguments: args } = request.params;
 
   const sourceIP = (request as any).meta?.sourceIP;
@@ -95,6 +94,22 @@ export async function handleToolCall(request: z.infer<typeof CallToolRequestSche
 
       case ToolName.READ_ELECTRON_LOGS: {
         const { logType, lines, follow } = ReadElectronLogsSchema.parse(args);
+
+        const securityResult = await securityManager.executeSecurely({
+          command: 'read_electron_logs',
+          args,
+          sourceIP,
+          userAgent,
+          operationType: 'logs',
+        });
+
+        if (securityResult.blocked) {
+          return {
+            content: [{ type: 'text', text: `Operation blocked: ${securityResult.error}` }],
+            isError: true,
+          };
+        }
+
         const logs = await readElectronLogs(logType, lines);
 
         const prefix = follow
@@ -226,8 +241,16 @@ export async function handleToolCall(request: z.infer<typeof CallToolRequestSche
       args,
     });
 
+    // Sanitize error messages — don't leak internal paths, stack traces, or CDP details to clients
+    const safeError = errorMessage
+      .replace(/[A-Z]:\\[^\s"']+/gi, '[path]') // Windows absolute paths
+      .replace(/\/[a-z][\w/]+\.(ts|js|json)/gi, '[path]') // Unix file paths
+      .replace(/at .+ \(.+\)/g, '[stack]') // Stack trace lines
+      .replace(/ws:\/\/[^\s"']+/g, '[ws]') // WebSocket URLs
+      .replace(/localhost:\d+/g, '[host]'); // localhost:port
+
     return {
-      content: [{ type: 'text', text: `Error executing ${name}: ${errorMessage}` }],
+      content: [{ type: 'text', text: `Error executing ${name}: ${safeError}` }],
       isError: true,
     };
   }

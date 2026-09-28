@@ -230,6 +230,35 @@ export class InputValidator {
   }
 
   /**
+   * Normalize common encoding bypasses before keyword scanning.
+   * Attackers use string concatenation (`'cons'+'tructor'`), unicode escapes
+   * (`constructor`), and hex escapes (`\x63onstructor`) to evade
+   * word-boundary regex checks. This normalizer collapses those patterns so
+   * the blocklist sees the real identifier.
+   */
+  private static normalizeEncodingBypasses(code: string): string {
+    let normalized = code;
+
+    // Collapse string concatenation: 'con' + 'structor' → 'constructor'
+    normalized = normalized.replace(
+      /(['"])(\w+)\1\s*\+\s*(['"])(\w+)\3/g,
+      (_q1, _q2, a: string, _q3, b: string) => `"${a + b}"`,
+    );
+
+    // Decode unicode escapes: c → c
+    normalized = normalized.replace(/\\u([0-9a-fA-F]{4})/g, (_m, hex: string) =>
+      String.fromCharCode(parseInt(hex, 16)),
+    );
+
+    // Decode hex escapes: \x63 → c
+    normalized = normalized.replace(/\\x([0-9a-fA-F]{2})/g, (_m, hex: string) =>
+      String.fromCharCode(parseInt(hex, 16)),
+    );
+
+    return normalized;
+  }
+
+  /**
    * Special validation for eval commands - validates the actual code to be executed.
    *
    * Defense-in-depth: {@link EVAL_CRITICAL_KEYWORDS} are screened on every eval
@@ -253,9 +282,13 @@ export class InputValidator {
     // catch prototype-pollution / process-escape primitives (Issue #9) without
     // false-positiving identifiers shared with the web platform (Issue: PR #22
     // CodeRabbit feedback — `document.URL` was being rejected by `\burl\b`).
+    //
+    // Normalize encoding bypasses first so string-concatenation and unicode/
+    // hex escapes cannot evade the keyword blocklist.
+    const normalizedCode = this.normalizeEncodingBypasses(code);
     for (const keyword of this.EVAL_CRITICAL_KEYWORDS) {
       const regex = new RegExp(`\\b${keyword}\\b`, 'g');
-      if (regex.test(code)) {
+      if (regex.test(normalizedCode)) {
         errors.push(`Dangerous keyword detected in eval: ${keyword}`);
         riskFactors.push(`eval_dangerous_keyword_${keyword}`);
       }

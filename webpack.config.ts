@@ -17,7 +17,7 @@ const config: Configuration = {
     modules: ['node_modules', 'src'],
   },
   externals: [nodeExternals({
-    allowlist: [/@modelcontextprotocol\/.*/]
+    allowlist: [/@modelcontextprotocol\/.*/, /^ajv/, /^ajv-formats/]
   })],
   module: {
     rules: [
@@ -36,9 +36,9 @@ const config: Configuration = {
     }),
   ],
   optimization: {
-    minimize: false, // Keep readable for debugging
+    minimize: true,
   },
-  devtool: 'source-map',
+  devtool: false,
 };
 
 export default config;

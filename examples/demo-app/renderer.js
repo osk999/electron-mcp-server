@@ -74,10 +74,14 @@ function setupFormHandling() {
       const formData = new FormData(form);
       const data = Object.fromEntries(formData.entries());
 
-      resultDiv.innerHTML = `
-        <strong>✅ Form Submitted Successfully!</strong><br>
-        <pre>${JSON.stringify(data, null, 2)}</pre>
-      `;
+      resultDiv.textContent = '';
+      const strong = document.createElement('strong');
+      strong.textContent = '✅ Form Submitted Successfully!';
+      resultDiv.appendChild(strong);
+      resultDiv.appendChild(document.createElement('br'));
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(data, null, 2);
+      resultDiv.appendChild(pre);
       resultDiv.className = 'result-box success';
 
       logEvent(`Form submitted: ${JSON.stringify(data)}`, 'success');
@@ -138,10 +142,14 @@ function setupSelectionHandling() {
 
       const data = { country, gender, terms };
 
-      resultDiv.innerHTML = `
-        <strong>✅ Selection Submitted!</strong><br>
-        <pre>${JSON.stringify(data, null, 2)}</pre>
-      `;
+      resultDiv.textContent = '';
+      const strong = document.createElement('strong');
+      strong.textContent = '✅ Selection Submitted!';
+      resultDiv.appendChild(strong);
+      resultDiv.appendChild(document.createElement('br'));
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(data, null, 2);
+      resultDiv.appendChild(pre);
       resultDiv.className = 'result-box success';
 
       logEvent(`Selection submitted: ${JSON.stringify(data)}`, 'success');
@@ -195,7 +203,7 @@ function setupEventLog() {
     clearLogBtn.addEventListener('click', () => {
       const logElement = document.getElementById('event-log');
       if (logElement) {
-        logElement.innerHTML = '';
+        logElement.textContent = '';
       }
       eventLog.length = 0;
       logEvent('Event log cleared', 'info');

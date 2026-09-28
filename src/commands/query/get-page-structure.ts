@@ -12,7 +12,7 @@ const schema = WindowTargetSchema;
 export const getPageStructure = defineCommand({
   name: 'electron_get_page_structure',
   description:
-    'Get an organized overview of page elements (buttons, inputs, selects, links) including detected framework. Returns JSON.',
+    'Get an organized overview of visible controls. Each control is named by its own text or aria-label. Returns JSON without utility class strings.',
   schema,
   operationType: 'query',
   async execute(_args, target) {
