@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { sendCDPMethod } from '../../utils/electron-connection';
+import { sendCDPMethod, type DevToolsTarget } from '../../utils/electron-connection';
 import { windowTargetFields } from '../shared/window-target';
 import { defineCommand } from '../types';
 
@@ -54,12 +54,54 @@ function resolveKeyCode(key: string): string {
   return key;
 }
 
-const MODIFIER_BIT: Readonly<Record<'Alt' | 'Ctrl' | 'Meta' | 'Shift', number>> = {
+export type KeyModifier = 'Alt' | 'Ctrl' | 'Meta' | 'Shift';
+
+const MODIFIER_BIT: Readonly<Record<KeyModifier, number>> = {
   Alt: 1,
   Ctrl: 2,
   Meta: 4,
   Shift: 8,
 };
+
+/**
+ * Press one key through CDP `Input.dispatchKeyEvent`.
+ * Shared by `electron_press_key` and `electron_act` so a batch can mix
+ * DOM steps with a real key event.
+ */
+export async function dispatchKeyPress(
+  target: DevToolsTarget,
+  key: string,
+  modifiers: readonly KeyModifier[] = [],
+): Promise<void> {
+  const code = resolveKeyCode(key);
+  const modifierMask = modifiers.reduce((mask, modifier) => mask | MODIFIER_BIT[modifier], 0);
+  const hasNonShiftModifier = modifiers.some(
+    (modifier) => modifier === 'Ctrl' || modifier === 'Alt' || modifier === 'Meta',
+  );
+  const isPrintable = key.length === 1 && !SPECIAL_KEY_TO_CODE[key] && !hasNonShiftModifier;
+
+  await sendCDPMethod(
+    'Input.dispatchKeyEvent',
+    {
+      type: isPrintable ? 'keyDown' : 'rawKeyDown',
+      key,
+      code,
+      modifiers: modifierMask,
+      ...(isPrintable ? { text: key, unmodifiedText: key } : {}),
+    },
+    target,
+  );
+  await sendCDPMethod(
+    'Input.dispatchKeyEvent',
+    {
+      type: 'keyUp',
+      key,
+      code,
+      modifiers: modifierMask,
+    },
+    target,
+  );
+}
 
 /**
  * Press a single key (with optional modifiers) using CDP `Input.dispatchKeyEvent`.
@@ -97,44 +139,12 @@ export const pressKey = defineCommand({
   schema,
   operationType: 'command',
   async execute(args, target) {
-    const code = resolveKeyCode(args.key);
-    const modifierMask = (args.modifiers ?? []).reduce(
-      (mask, modifier) => mask | MODIFIER_BIT[modifier],
-      0,
-    );
-
     // Per CDP guidance: omit text/unmodifiedText (use rawKeyDown) when a
     // non-shift modifier is held, otherwise the renderer inserts the
     // character alongside the shortcut action. Shift on its own is fine —
     // it just produces uppercase. See:
     // https://chromedevtools.github.io/devtools-protocol/tot/Input/
-    const hasNonShiftModifier = (args.modifiers ?? []).some(
-      (modifier) => modifier === 'Ctrl' || modifier === 'Alt' || modifier === 'Meta',
-    );
-    const isPrintable =
-      args.key.length === 1 && !SPECIAL_KEY_TO_CODE[args.key] && !hasNonShiftModifier;
-
-    await sendCDPMethod(
-      'Input.dispatchKeyEvent',
-      {
-        type: isPrintable ? 'keyDown' : 'rawKeyDown',
-        key: args.key,
-        code,
-        modifiers: modifierMask,
-        ...(isPrintable ? { text: args.key, unmodifiedText: args.key } : {}),
-      },
-      target,
-    );
-    await sendCDPMethod(
-      'Input.dispatchKeyEvent',
-      {
-        type: 'keyUp',
-        key: args.key,
-        code,
-        modifiers: modifierMask,
-      },
-      target,
-    );
+    await dispatchKeyPress(target, args.key, args.modifiers ?? []);
 
     const modifierLabel =
       args.modifiers && args.modifiers.length > 0 ? `${args.modifiers.join('+')}+` : '';

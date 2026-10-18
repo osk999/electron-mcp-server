@@ -406,6 +406,31 @@ npm install -g @laststance/electron-mcp-server
 
 ## 🔧 Available Tools
 
+### `electron_snapshot` and `electron_act`
+
+Prefer these when an AI is driving the app. A text outline is far smaller than a screenshot or `electron_get_page_structure`, and one `electron_act` call returns the updated outline so the model does not spend another turn reading the page.
+
+`electron_snapshot` returns one line per control with a stable ref:
+
+```text
+Inbox · /#/inbox
+- button "Save" [ref=e1]
+- textbox "Email" [ref=e2]: ""
+```
+
+`electron_act` runs up to 8 steps (`click`, `fill`, `select`, `hover`, `press`, `scroll`, `wait`) by that ref. When the page barely changed, the result is a diff. A failed step stops the batch and returns the full outline.
+
+```json
+{
+  "steps": [
+    { "action": "fill", "ref": "e2", "value": "ada@example.com" },
+    { "action": "click", "ref": "e1" }
+  ]
+}
+```
+
+Use a screenshot when the outline is not enough, for example a canvas or a layout you have to see.
+
 ### `launch_electron_app`
 
 Launch an Electron application with debugging capabilities.

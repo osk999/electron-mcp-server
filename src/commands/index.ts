@@ -1,3 +1,4 @@
+import * as agent from './agent';
 import * as click from './click';
 import * as evaluation from './eval';
 import * as fill from './fill';
@@ -20,6 +21,11 @@ export { extractWindowTarget, WindowTargetSchema } from './shared/window-target'
  * declaration order). Group by category for readability; alphabetical within.
  */
 export const allCommands: ReadonlyArray<CommandModule> = [
+  // Listed first. A compact outline plus one batched action replaces a
+  // screenshot and a follow-up page read, which is where agent tokens go.
+  agent.snapshot,
+  agent.act,
+
   // Query (read-only)
   query.getTitle,
   query.getUrl,

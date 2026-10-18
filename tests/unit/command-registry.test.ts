@@ -55,6 +55,8 @@ describe('command registry (Phase 1-6)', () => {
 
   it('includes representative commands from every Phase 1-6 category', () => {
     const expectedCommands = [
+      'electron_snapshot',
+      'electron_act',
       'electron_get_title',
       'electron_query_text_by_selector',
       'electron_click_by_selector',

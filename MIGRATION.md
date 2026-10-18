@@ -104,6 +104,8 @@ v1 counterpart — they're new capabilities.
 | | `electron_session_storage_get_item` | Single-key `sessionStorage.getItem`. |
 | | `electron_session_storage_set_item` | Single-key `sessionStorage.setItem`. |
 | | `electron_clear_storage` | Clear local / session / cookies (best-effort). |
+| Agent outline | `electron_snapshot` | Compact text outline with stable `[ref=eN]` values. Prefer this over a screenshot or `electron_get_page_structure`. |
+| | `electron_act` | Up to 8 UI steps by ref, then the outline or a diff. One call replaces an action plus a follow-up read. |
 
 ### Unchanged across v1 → v2
 

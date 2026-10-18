@@ -1,5 +1,7 @@
 # MCP Usage Examples for Electron MCP Server
 
+> **v2 agents:** prefer `electron_snapshot` and `electron_act`. They return a compact outline with stable refs and avoid a screenshot plus a follow-up read. The examples below use the removed v1 `send_command_to_electron` shape. See [MIGRATION.md](./MIGRATION.md).
+
 This document provides comprehensive examples of how to properly use the Electron MCP Server tools.
 
 ## 🎯 Common Patterns
